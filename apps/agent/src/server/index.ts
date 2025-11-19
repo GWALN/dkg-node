@@ -5,6 +5,7 @@ import dkgEssentialsPlugin from "@dkg/plugin-dkg-essentials";
 import createFsBlobStorage from "@dkg/plugin-dkg-essentials/createFsBlobStorage";
 import examplePlugin from "@dkg/plugin-example";
 import swaggerPlugin from "@dkg/plugin-swagger";
+import gwalnPlugin from "@dkg/plugin-gwaln";
 //@ts-expect-error No types for dkg.js ...
 import DKG from "dkg.js";
 import { eq } from "drizzle-orm";
@@ -124,6 +125,7 @@ const app = createPluginServer({
       ],
     }),
     webInterfacePlugin(path.join(__dirname, "./app")),
+    gwalnPlugin,
   ],
 });
 

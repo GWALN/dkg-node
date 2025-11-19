@@ -1,0 +1,43 @@
+{
+  "name": "@dkg/plugin-gwaln",
+  "version": "0.0.1",
+  "description": "",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "dev": "tsup src/*.ts --format cjs,esm --dts --watch",
+    "build": "tsup src/*.ts --format cjs,esm --dts",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "test": "mocha --loader ../../node_modules/tsx/dist/loader.mjs 'tests/**/*.spec.ts'"
+  },
+  "devDependencies": {
+    "@dkg/eslint-config": "*",
+    "@dkg/typescript-config": "*",
+    "tsup": "^8.5.0"
+  },
+  "dependencies": {
+    "@dkg/plugin-dkg-essentials": "^0.0.3",
+    "@dkg/plugin-swagger": "^0.0.2",
+    "@dkg/plugins": "^0.0.2",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "axios": "^1.13.2",
+    "body-parser": "^2.2.0",
+    "cheerio": "^1.1.2",
+    "diff": "^8.0.2",
+    "dkg.js": "^8.2.0",
+    "express": "^5.1.0",
+    "figlet": "^1.9.4",
+    "json-diff": "^1.0.6",
+    "node-fetch": "^3.3.2",
+    "ora": "^9.0.0",
+    "prompts": "^2.4.2",
+    "string-similarity": "^4.0.4",
+    "ts-node": "^10.9.2",
+    "turndown": "^7.2.2",
+    "typescript": "^5.9.3",
+    "zod": "^3.25.76"
+  }
+}
