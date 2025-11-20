@@ -3,15 +3,18 @@
  * @description MCP tool for publishing arbitrary JSON-LD.
  */
 
-import { z } from 'zod';
-import { loadJsonLdFromFile, publishJsonLdAsset } from '../workflows/publish-workflow';
-import { textContent } from './utils';
+import { z } from "zod";
+import {
+  loadJsonLdFromFile,
+  publishJsonLdAsset,
+} from "../workflows/publish-workflow";
+import { textContent } from "./utils";
 
 export const PublishInputSchema = z
   .object({
     filePath: z.string().optional(),
     payload: z.record(z.string(), z.unknown()).optional(),
-    privacy: z.enum(['public', 'private']).optional(),
+    privacy: z.enum(["public", "private"]).optional(),
     endpoint: z.string().optional(),
     environment: z.string().optional(),
     port: z.number().optional(),
@@ -25,45 +28,62 @@ export const PublishInputSchema = z
     dryRun: z.boolean().optional(),
   })
   .refine((value) => Boolean(value.filePath || value.payload), {
-    message: 'Provide either filePath or payload.',
-    path: ['filePath'],
+    message: "Provide either filePath or payload.",
+    path: ["filePath"],
   });
 
 export const publishTool = {
-  title: 'Publish JSON-LD Knowledge Assets to Decentralized Knowledge Graph (DKG)',
+  title:
+    "Publish JSON-LD Knowledge Assets to Decentralized Knowledge Graph (DKG)",
   description:
-    'Publishes any valid JSON-LD Knowledge Asset to the DKG (Decentralized Knowledge Graph) using the DKG SDK. Accepts JSON-LD payloads either inline or from a file path. Supports public and private asset publishing. Returns a UAL (Universal Asset Locator) that uniquely identifies the published asset on the blockchain, along with dataset root information. Supports dry-run mode to validate payloads without publishing. Use this to publish custom structured knowledge assets to the decentralized network.',
+    "Publishes any valid JSON-LD Knowledge Asset to the DKG (Decentralized Knowledge Graph) using the DKG SDK. Accepts JSON-LD payloads either inline or from a file path. Supports public and private asset publishing. Returns a UAL (Universal Asset Locator) that uniquely identifies the published asset on the blockchain, along with dataset root information. Supports dry-run mode to validate payloads without publishing. Use this to publish custom structured knowledge assets to the decentralized network.",
   inputSchema: PublishInputSchema,
 };
 
-export const publishHandler = async (input: z.infer<typeof PublishInputSchema>) => {
-  const payload =
-    input.payload ??
-    loadJsonLdFromFile(
-      input.filePath ??
-        (() => {
-          throw new Error('filePath is required when inline payload is not provided.');
-        })(),
-    );
-  const result = await publishJsonLdAsset({
-    ...input,
-    payload,
-    privacy: input.privacy ?? 'private',
-  });
-  if (result.dryRun) {
-    return {
-      content: textContent('[publish] Dry-run complete. Payload echoed in structured content.'),
-      structuredContent: { dryRun: true, payload: result.payload },
-    };
-  }
-  return {
-    content: textContent(
-      `[publish] Knowledge Asset published. ${result.ual ? `UAL: ${result.ual}` : 'UAL missing.'}`,
-    ),
-    structuredContent: {
+export const publishHandler = async (
+  input: z.infer<typeof PublishInputSchema>
+) => {
+  try {
+    const payload =
+      input.payload ??
+      loadJsonLdFromFile(
+        input.filePath ??
+          (() => {
+            throw new Error(
+              "filePath is required when inline payload is not provided."
+            );
+          })()
+      );
+    const result = await publishJsonLdAsset({
+      ...input,
+      payload,
+      privacy: input.privacy ?? "private",
+    });
+    if (result.dryRun) {
+      const structuredContent = { dryRun: true, payload: result.payload };
+      return {
+        content: textContent(
+          `[publish] Dry-run complete. Payload validated successfully.\n\nResults:\n${JSON.stringify(structuredContent, null, 2)}`
+        ),
+      };
+    }
+    const structuredContent = {
       dryRun: false,
       ual: result.ual,
       datasetRoot: result.datasetRoot ?? null,
-    },
-  };
+    };
+    return {
+      content: textContent(
+        `[publish] Knowledge Asset published. ${result.ual ? `UAL: ${result.ual}` : "UAL missing."}\n\nResults:\n${JSON.stringify(structuredContent, null, 2)}`
+      ),
+    };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "Unknown error occurred while publishing asset";
+    throw new Error(`[publish] Failed to publish asset: ${errorMessage}`);
+  }
 };

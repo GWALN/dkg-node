@@ -3,13 +3,13 @@
  * @description MCP tool for managing Community Notes.
  */
 
-import { z } from 'zod';
-import { loadNoteEntry } from '../shared/notes';
-import { buildNoteDraft, publishNoteDraft } from '../workflows/notes-workflow';
-import { textContent } from './utils';
+import { z } from "zod";
+import { loadNoteEntry } from "../shared/notes";
+import { buildNoteDraft, publishNoteDraft } from "../workflows/notes-workflow";
+import { textContent } from "./utils";
 
 export const NotesInputSchema = z.object({
-  action: z.enum(['build', 'publish', 'status']),
+  action: z.enum(["build", "publish", "status"]),
   topicId: z.string(),
   summary: z.string().optional(),
   accuracy: z.number().min(0).max(5).optional(),
@@ -34,50 +34,62 @@ export const NotesInputSchema = z.object({
 });
 
 export const notesTool = {
-  title: 'Build, Publish, and Manage Community Notes from Analysis',
+  title: "Build, Publish, and Manage Community Notes from Analysis",
   description:
     'Creates, publishes, and manages Community Notes (X Community Notes format) derived from GWALN analysis results. Supports three actions: (1) "build" - generates a note draft from analysis with ratings (accuracy, completeness, tone bias) and summary, returns file path and draft content; (2) "publish" - publishes the note to the DKG (Decentralized Knowledge Graph) and returns a UAL (Universal Asset Locator) for the published asset; (3) "status" - retrieves the current status and content of an existing note draft. Returns structured data including draft content, UALs, file paths, and publication status.',
   inputSchema: NotesInputSchema,
 };
 
 export const notesHandler = async (input: z.infer<typeof NotesInputSchema>) => {
-  if (input.action === 'build') {
-    const result = buildNoteDraft(input);
-    return {
-      content: textContent(`[notes] Built draft for ${result.topicId} at ${result.filePath}.`),
-      structuredContent: {
+  try {
+    if (input.action === "build") {
+      const result = buildNoteDraft(input);
+      const structuredContent = {
         topicId: result.topicId,
         filePath: result.filePath,
         entry: result.entry,
-      },
-    };
-  }
+      };
+      return {
+        content: textContent(
+          `[notes] Built draft for ${result.topicId} at ${result.filePath}.\n\nResults:\n${JSON.stringify(structuredContent, null, 2)}`
+        ),
+      };
+    }
 
-  if (input.action === 'publish') {
-    const result = await publishNoteDraft(input);
-    const prefix = result.dryRun ? '[notes] Dry-run' : '[notes] Publish';
-    const suffix = result.ual
-      ? `UAL: ${result.ual}`
-      : result.dryRun
-        ? 'payload echoed in structuredContent'
-        : 'UAL missing from DKG response';
-    return {
-      content: textContent(`${prefix} complete for ${result.topicId}. ${suffix}.`),
-      structuredContent: { ...result } as Record<string, unknown>,
-    };
-  }
+    if (input.action === "publish") {
+      const result = await publishNoteDraft(input);
+      const prefix = result.dryRun ? "[notes] Dry-run" : "[notes] Publish";
+      const suffix = result.ual
+        ? `UAL: ${result.ual}`
+        : result.dryRun
+          ? "payload validated successfully"
+          : "UAL missing from DKG response";
+      const structuredContent = { ...result } as Record<string, unknown>;
+      return {
+        content: textContent(
+          `${prefix} complete for ${result.topicId}. ${suffix}.\n\nResults:\n${JSON.stringify(structuredContent, null, 2)}`
+        ),
+      };
+    }
 
-  const payload = loadNoteEntry(input.topicId);
-  return {
-    content: textContent(
-      payload.entry
-        ? `[notes] Loaded status for ${input.topicId} (${payload.entry.status}).`
-        : `[notes] No note draft found for ${input.topicId}.`,
-    ),
-    structuredContent: {
+    const payload = loadNoteEntry(input.topicId);
+    const structuredContent = {
       topicId: input.topicId,
       entry: payload.entry,
       note: payload.note,
-    },
-  };
+    };
+    return {
+      content: textContent(
+        `${payload.entry ? `[notes] Loaded status for ${input.topicId} (${payload.entry.status}).` : `[notes] No note draft found for ${input.topicId}.`}\n\nResults:\n${JSON.stringify(structuredContent, null, 2)}`
+      ),
+    };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "Unknown error occurred while processing notes";
+    throw new Error(`[notes] Failed to process notes: ${errorMessage}`);
+  }
 };

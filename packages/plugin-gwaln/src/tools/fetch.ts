@@ -3,35 +3,49 @@
  * @description MCP tool for fetching structured snapshots.
  */
 
-import { z } from 'zod';
-import { type FetchSource, runFetchWorkflow } from '../workflows/fetch-workflow';
-import { textContent } from './utils';
+import { z } from "zod";
+import {
+  type FetchSource,
+  runFetchWorkflow,
+} from "../workflows/fetch-workflow";
+import { textContent } from "./utils";
 
 export const FetchInputSchema = z.object({
-  source: z.enum(['wiki', 'grok', 'both']).optional(),
+  source: z.enum(["wiki", "grok", "both"]).optional(),
   topicId: z.string().optional(),
 });
 
 export const fetchTool = {
-  title: 'Fetch Structured Content Snapshots from Grokipedia and Wikipedia',
+  title: "Fetch Structured Content Snapshots from Grokipedia and Wikipedia",
   description:
-    'Downloads and stores structured content snapshots from Grokipedia (X.AI) and/or Wikipedia for one or more topics. Returns parsed, structured data ready for analysis. Content is cached locally to avoid redundant downloads. Use this tool to gather source material before running analysis. Returns structured payloads containing the fetched content organized by source (wiki/grok) and topic.',
+    "Downloads and stores structured content snapshots from Grokipedia (X.AI) and/or Wikipedia for one or more topics. Returns parsed, structured data ready for analysis. Content is cached locally to avoid redundant downloads. Use this tool to gather source material before running analysis. Returns structured payloads containing the fetched content organized by source (wiki/grok) and topic.",
   inputSchema: FetchInputSchema,
 };
 
 export const fetchHandler = async (input: z.infer<typeof FetchInputSchema>) => {
-  const { source, topicId } = input;
-  const selectedSource = source ?? 'both';
-  const sources: FetchSource[] = selectedSource === 'both' ? ['wiki', 'grok'] : [selectedSource];
-  const payload = [];
-  for (const selected of sources) {
-    const results = await runFetchWorkflow(selected, topicId);
-    payload.push({ source: selected, results });
+  try {
+    const { source, topicId } = input;
+    const selectedSource = source ?? "both";
+    const sources: FetchSource[] =
+      selectedSource === "both" ? ["wiki", "grok"] : [selectedSource];
+    const payload = [];
+    for (const selected of sources) {
+      const results = await runFetchWorkflow(selected, topicId);
+      payload.push({ source: selected, results });
+    }
+    const structuredContent = { topicId: topicId ?? null, sources: payload };
+    return {
+      content: textContent(
+        `[fetch] Completed fetch for ${sources.join("+")} (topic: ${topicId ?? "all topics"}).\n\nResults:\n${JSON.stringify(structuredContent, null, 2)}`
+      ),
+    };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "Unknown error occurred while fetching content";
+    throw new Error(`[fetch] Failed to fetch content: ${errorMessage}`);
   }
-  return {
-    content: textContent(
-      `[fetch] Completed fetch for ${sources.join('+')} (topic: ${topicId ?? 'all topics'}).`,
-    ),
-    structuredContent: { topicId: topicId ?? null, sources: payload },
-  };
 };
