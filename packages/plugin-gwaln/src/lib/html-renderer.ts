@@ -196,11 +196,11 @@ export const renderBiasPanel = (analysis: StructuredAnalysisReport): string => {
   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
     <div style="background: #f8f9fa; border: 1px solid #e9ecef; padding: 0.75rem; border-radius: 6px; text-align: center;">
       <p style="font-size: 0.65rem; color: #6c757d; margin-bottom: 0.375rem; text-transform: uppercase; letter-spacing: 0.05em;">Subjectivity</p>
-      <strong style="display: block; font-size: 1.25rem; color: #221C46;">${metrics.subjectivity_delta.toFixed(3)}</strong>
+      <strong style="display: block; font-size: 2rem; color: #221C46;">${metrics.subjectivity_delta.toFixed(3)}</strong>
     </div>
     <div style="background: #f8f9fa; border: 1px solid #e9ecef; padding: 0.75rem; border-radius: 6px; text-align: center;">
       <p style="font-size: 0.65rem; color: #6c757d; margin-bottom: 0.375rem; text-transform: uppercase; letter-spacing: 0.05em;">Polarity</p>
-      <strong style="display: block; font-size: 1.25rem; color: #221C46;">${metrics.polarity_delta.toFixed(3)}</strong>
+      <strong style="display: block; font-size: 2rem; color: #221C46;">${metrics.polarity_delta.toFixed(3)}</strong>
     </div>
   </div>
   ${grokTerms ? `<div style="margin-bottom: 0.5rem;"><p style="font-size: 0.65rem; color: #6c757d; margin-bottom: 0.375rem; text-transform: uppercase; letter-spacing: 0.05em;">Grokipedia Terms</p><div>${grokTerms}</div></div>` : ''}
@@ -314,19 +314,19 @@ export const renderSimilarSentencesModal = (analysis: StructuredAnalysisReport):
     </div>
     <div class="modal-body">
       ${
-        reworded.length
-          ? `
-        <h4 style="font-size: 0.85rem; color: var(--color-purple); margin-bottom: 0.75rem; font-weight: 600;">Reworded Sentences (${reworded.length})</h4>
-        <ul style="list-style: none; padding: 0; margin-bottom: 2rem;">${rewordedItems}</ul>
-      `
-          : ''
-      }
-      ${
         agreed.length
           ? `
         <h4 style="font-size: 0.85rem; color: var(--color-purple); margin-bottom: 0.75rem; font-weight: 600;">Identical Sentences (${agreed.length})</h4>
         <p style="font-size: 0.75rem; color: var(--color-text-muted); margin-bottom: 1rem;">These sentences appear exactly the same in both Wikipedia and Grokipedia:</p>
-        <ul style="list-style: none; padding: 0;">${agreedItems}</ul>
+        <ul style="list-style: none; padding: 0; margin-bottom: 2rem;">${agreedItems}</ul>
+      `
+          : ''
+      }
+      ${
+        reworded.length
+          ? `
+        <h4 style="font-size: 0.85rem; color: var(--color-purple); margin-bottom: 0.75rem; font-weight: 600;">Reworded Sentences (${reworded.length})</h4>
+        <ul style="list-style: none; padding: 0;">${rewordedItems}</ul>
       `
           : ''
       }
@@ -387,6 +387,34 @@ export const renderHtmlReport = (
   const hasSimilarContent =
     comparison.sentences.reworded.length > 0 || comparison.sentences.agreed.length > 0;
 
+  const score = summary.confidence.score;
+  const label = summary.confidence.label;
+  const actualValue = Math.min(100, Math.max(0, score * 100));
+
+  let meterColor = '#dc3545';
+
+  if (score >= 0.9) {
+    meterColor = '#28a745';
+  } else if (score >= 0.7) {
+    meterColor = '#00EB5E';
+  } else if (score >= 0.5) {
+    meterColor = '#ffc107';
+  } else if (score >= 0.2) {
+    meterColor = '#fd7e14';
+  }
+
+  const confidenceMeter = `<div style="padding: 1.25rem;width: 400px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+      <span style="font-size: 1.75rem; font-weight: 600; color: #6c757d; text-transform: uppercase; letter-spacing: 0.05em;">Confidence</span>
+      <span style="font-size: 2rem; font-weight: 700; color: ${meterColor};">${actualValue.toFixed(0)}%</span>
+    </div>
+    <div style="position: relative; height: 10px; background: linear-gradient(to right, #dc3545 0%, #dc3545 20%, #fd7e14 20%, #fd7e14 50%, #ffc107 50%, #ffc107 70%, #00EB5E 70%, #00EB5E 90%, #28a745 90%, #28a745 100%); overflow: visible;">
+      <div style="position: absolute; left: ${actualValue}%; top: 50%; transform: translate(-50%, -50%); width: 3px; height: 15px; background: #221C46; z-index: 2;"></div>
+      <div style="position: absolute; left: ${actualValue}%; top: -6px; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 6px solid #221C46; z-index: 3;"></div>
+    </div>
+    <div style="text-align: center; margin-top: 0.75rem; font-size: 0.7rem; color: #6c757d; text-transform: uppercase; letter-spacing: 0.03em;">${label.replace(/_/g, ' ')}</div>
+  </div>`;
+
   const statsCards = [
     {
       label: 'Sentence Similarity',
@@ -420,12 +448,6 @@ export const renderHtmlReport = (
                 Math.max(summary.wiki_sentence_count, summary.grok_sentence_count, 1),
             )
           : 0,
-    },
-    {
-      label: 'Confidence',
-      value: `<span style="font-size: 0.85rem;">${summary.confidence.label.replace(/_/g, ' ')}</span>`,
-      detail: `Score: ${summary.confidence.score.toFixed(2)}`,
-      progress: Math.min(1, Math.max(0, summary.confidence.score)),
     },
     {
       label: 'Analysis Window',
@@ -513,6 +535,7 @@ export const renderHtmlReport = (
     'topic.urls.wikipedia': escapeHtml(topic.urls.wikipedia),
     'topic.urls.grokipedia': escapeHtml(topic.urls.grokipedia),
     statsCards,
+    confidenceMeter,
     versionBox: versionWithDiff,
     noteInfoLogo: renderNoteInfoLogo(notePayload),
     noteInfo: renderNoteInfo(notePayload, topic.urls.wikipedia, topic.urls.grokipedia),
