@@ -1,8 +1,8 @@
-import { useCallback, useRef, useState } from "react";
-import { View, Platform, KeyboardAvoidingView, ScrollView } from "react-native";
-import { Image } from "expo-image";
 import * as Clipboard from "expo-clipboard";
+import { Image } from "expo-image";
 import { fetch } from "expo/fetch";
+import { useCallback, useRef, useState } from "react";
+import { KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 //import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -11,16 +11,17 @@ import {
 } from "@dkg/plugin-dkg-essentials/utils";
 
 import { useMcpClient } from "@/client";
-import useMcpToolsSession from "@/hooks/useMcpToolsSession";
-import useColors from "@/hooks/useColors";
-import usePlatform from "@/hooks/usePlatform";
-import Page from "@/components/layout/Page";
-import Container from "@/components/layout/Container";
-import Header from "@/components/layout/Header";
+import { useAlerts } from "@/components/Alerts";
 import Chat from "@/components/Chat";
 import { SourceKAResolver } from "@/components/Chat/Message/SourceKAs/CollapsibleItem";
-import { useAlerts } from "@/components/Alerts";
+import Container from "@/components/layout/Container";
+import Header from "@/components/layout/Header";
+import Page from "@/components/layout/Page";
+import useColors from "@/hooks/useColors";
+import useMcpToolsSession from "@/hooks/useMcpToolsSession";
+import usePlatform from "@/hooks/usePlatform";
 
+import useSettings from "@/hooks/useSettings";
 import {
   type ChatMessage,
   type ToolCall,
@@ -28,14 +29,13 @@ import {
   makeCompletionRequest,
   toContents,
 } from "@/shared/chat";
+import { toError } from "@/shared/errors";
 import {
   FileDefinition,
   parseFilesFromContent,
   serializeFiles,
   uploadFiles,
 } from "@/shared/files";
-import { toError } from "@/shared/errors";
-import useSettings from "@/hooks/useSettings";
 
 export default function ChatPage() {
   const colors = useColors();
@@ -51,6 +51,10 @@ export default function ChatPage() {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const chatMessagesRef = useRef<ScrollView>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
+
+  // Keep messagesRef in sync with messages state
+  messagesRef.current = messages;
 
   async function callTool(tc: ToolCall & { id: string }) {
     tools.saveCallInfo(tc.id, { input: tc.args, status: "loading" });
@@ -109,16 +113,31 @@ export default function ChatPage() {
         else otherContents.push(c);
       }
       newMessage.content = otherContents;
+
+      const toolCallId = (newMessage as any).tool_call_id;
+      if (toolCallId) {
+        const existingToolMessage = messagesRef.current.find(
+          (msg) => msg.role === "tool" && (msg as any).tool_call_id === toolCallId
+        );
+        if (existingToolMessage) {
+          console.warn(`Duplicate tool_call_id detected: ${toolCallId}. Skipping duplicate message.`);
+          return;
+        }
+      }
     }
 
-    setMessages((prevMessages) => [...prevMessages, newMessage]);
+    let latestMessages: ChatMessage[] = [];
+    setMessages((prevMessages) => {
+      latestMessages = [...prevMessages, newMessage];
+      return latestMessages;
+    });
 
     if (!mcp.token) throw new Error("Unauthorized");
 
     setIsGenerating(true);
     const completion = await makeCompletionRequest(
       {
-        messages: [...messages, newMessage],
+        messages: latestMessages,
         tools: tools.enabled,
       },
       {
@@ -130,6 +149,27 @@ export default function ChatPage() {
     if (newMessage.role === "tool") {
       completion.content = toContents(completion.content);
       completion.content.push(...kaContents);
+    }
+
+    // Ensure tool_call IDs are unique to prevent duplicate tool_call_id errors
+    if (completion.tool_calls && completion.tool_calls.length > 0) {
+      const seenIds = new Set<string>();
+      completion.tool_calls = completion.tool_calls.map((tc, index) => {
+        let tcId = tc.id;
+        if (!tcId || seenIds.has(tcId)) {
+          let uniqueId = tcId || `call_${Date.now()}_${index}`;
+          let counter = 0;
+          while (seenIds.has(uniqueId)) {
+            uniqueId = `call_${Date.now()}_${index}_${counter++}`;
+          }
+          tcId = uniqueId;
+        }
+        seenIds.add(tcId);
+        return {
+          ...tc,
+          id: tcId,
+        };
+      });
     }
 
     setMessages((prevMessages) => [...prevMessages, completion]);
@@ -151,8 +191,8 @@ export default function ChatPage() {
             parsedContent.metadata
               .at(0)
               ?.[
-                "https://ontology.origintrail.io/dkg/1.0#publishTime"
-              ]?.at(0)?.["@value"] ?? Date.now(),
+              "https://ontology.origintrail.io/dkg/1.0#publishTime"
+            ]?.at(0)?.["@value"] ?? Date.now(),
           ).getTime(),
           txHash: parsedContent.metadata
             .at(0)
@@ -184,7 +224,7 @@ export default function ChatPage() {
             parsedContent.metadata
               .at(0)
               ?.["https://ontology.origintrail.io/dkg/1.0#publishTx"]?.at(0)?.[
-              "@value"
+            "@value"
             ] ?? "unknown";
           resolved.publisher =
             parsedContent.metadata
