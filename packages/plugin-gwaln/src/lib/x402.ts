@@ -4,12 +4,12 @@
  * Implements the x402 payment standard: https://x402.gitbook.io/x402
  */
 
-import { type NextFunction, type Request, type Response } from 'express';
-import { readConfig } from '../shared/config';
+import { type NextFunction, type Request, type Response } from "express";
+import { readConfig } from "../shared/config";
 
 export interface X402Config {
-  host: string;
-  port: number;
+  host?: string;
+  port?: number;
   amount?: string; // Amount in TRAC tokens (with 18 decimals)
   asset?: string; // Token contract address
   networkId?: string; // Network chain identifier (e.g., otp:20430)
@@ -38,20 +38,20 @@ export interface X402PaymentHeader {
 }
 
 export const BYPASS_PAYMENT_METHODS = [
-  'initialize',
-  'initialized',
-  'notifications/initialized',
-  'tools/list',
-  'prompts/list',
-  'resources/list',
+  "initialize",
+  "initialized",
+  "notifications/initialized",
+  "tools/list",
+  "prompts/list",
+  "resources/list",
 ] as const;
 
-export const PAYWALLED_TOOLS = ['query', 'publish', 'lookup'] as const;
+export const PAYWALLED_TOOLS = ["query", "publish", "lookup"] as const;
 
-export const NEUROWEB_TESTNET_ID = 'otp:20430';
-export const NEUROWEB_TESTNET_NAME = 'neuroweb-testnet';
-export const TRAC_TOKEN_ADDRESS = '0xFfFFFFff00000000000000000000000000000001';
-export const TRAC_AMOUNT = '1000000000000000000'; // 1 TRAC with 18 decimals
+export const NEUROWEB_TESTNET_ID = "otp:20430";
+export const NEUROWEB_TESTNET_NAME = "neuroweb-testnet";
+export const TRAC_TOKEN_ADDRESS = "0xFfFFFFff00000000000000000000000000000001";
+export const TRAC_AMOUNT = "1000000000000000000"; // 1 TRAC with 18 decimals
 
 /**
  * Parse the X-Payment header from the request
@@ -59,12 +59,12 @@ export const TRAC_AMOUNT = '1000000000000000000'; // 1 TRAC with 18 decimals
 function parsePaymentHeader(header: string): X402PaymentHeader | null {
   try {
     // Expected format: scheme amount=<amount> asset=<asset> network=<network> nonce=<nonce> signature=<signature> from=<from>
-    const parts = header.split(' ');
-    const scheme = parts[0];
+    const parts = header.split(" ");
+    const scheme = parts[0]!;
     const params: Record<string, string> = {};
 
     for (let i = 1; i < parts.length; i++) {
-      const [key, value] = parts[i].split('=');
+      const [key, value] = parts[i]?.split("=") ?? [];
       if (key && value) {
         params[key] = value;
       }
@@ -104,13 +104,13 @@ async function verifyPayment(
   expectedAmount: string,
   expectedAsset: string,
   expectedNetwork: string,
-  payTo: string,
+  payTo: string
 ): Promise<boolean> {
   try {
     const verifyResponse = await fetch(`${facilitatorURL}/verify`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         scheme: paymentHeader.scheme,
@@ -128,14 +128,17 @@ async function verifyPayment(
     });
 
     if (!verifyResponse.ok) {
-      console.error('Payment verification failed:', await verifyResponse.text());
+      console.error(
+        "Payment verification failed:",
+        await verifyResponse.text()
+      );
       return false;
     }
 
     const verifyResult = await verifyResponse.json();
     return verifyResult.valid === true;
   } catch (error) {
-    console.error('Error verifying payment:', error);
+    console.error("Error verifying payment:", error);
     return false;
   }
 }
@@ -146,13 +149,13 @@ async function verifyPayment(
 async function settlePayment(
   paymentHeader: X402PaymentHeader,
   facilitatorURL: string,
-  payTo: string,
+  payTo: string
 ): Promise<boolean> {
   try {
     const settleResponse = await fetch(`${facilitatorURL}/settle`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         scheme: paymentHeader.scheme,
@@ -167,14 +170,14 @@ async function settlePayment(
     });
 
     if (!settleResponse.ok) {
-      console.error('Payment settlement failed:', await settleResponse.text());
+      console.error("Payment settlement failed:", await settleResponse.text());
       return false;
     }
 
     const settleResult = await settleResponse.json();
     return settleResult.settled === true;
   } catch (error) {
-    console.error('Error settling payment:', error);
+    console.error("Error settling payment:", error);
     return false;
   }
 }
@@ -183,34 +186,45 @@ async function settlePayment(
  * Create MCP x402 payment middleware that only requires payment for specific tools.
  * @returns Express middleware function
  */
-export const initializePaymentMiddleware = async (
-  config: X402Config,
+export const createPaymentMiddleware = async (
+  config?: Partial<X402Config>
 ): Promise<(req: Request, res: Response, next: NextFunction) => void> => {
   const gwalnConfig = readConfig();
   const walletAddress = gwalnConfig.dkgPublicKey;
 
   if (!walletAddress) {
     throw new Error(
-      'No wallet address configured. Set dkgPublicKey in .gwalnrc.json or run "gwaln init".',
+      'No wallet address configured. Set dkgPublicKey in .gwalnrc.json or run "gwaln init".'
     );
   }
 
-  const baseUrl = `http://${config.host}:${config.port}/mcp`;
-  const facilitatorURL = config.facilitatorURL ?? 'https://api.cdp.coinbase.com/platform/v2/x402';
-  const amount = config.amount ?? TRAC_AMOUNT;
-  const asset = config.asset ?? TRAC_TOKEN_ADDRESS;
-  const networkId = config.networkId ?? NEUROWEB_TESTNET_ID;
+  const facilitatorURL =
+    config?.facilitatorURL ?? "https://api.cdp.coinbase.com/platform/v2/x402";
+  const amount = config?.amount ?? TRAC_AMOUNT;
+  const asset = config?.asset ?? TRAC_TOKEN_ADDRESS;
+  const networkId = config?.networkId ?? NEUROWEB_TESTNET_ID;
 
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  return async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    const protocol = req.protocol || "http";
+    const host = req.get("host") || config?.host || "localhost";
+    const port = config?.port;
+    const baseUrl =
+      port && !host.includes(":")
+        ? `${protocol}://${host}:${port}/mcp`
+        : `${protocol}://${host}/mcp`;
     if (req.body?.method && BYPASS_PAYMENT_METHODS.includes(req.body.method)) {
       next();
       return;
     }
 
     let isPaywalled = false;
-    let toolDescription = config.description ?? 'GWALN MCP tool access';
+    let toolDescription = config?.description ?? "GWALN MCP tool access";
 
-    if (req.body?.method === 'tools/call') {
+    if (req.body?.method === "tools/call") {
       const toolName = req.body?.params?.name;
       if (toolName && PAYWALLED_TOOLS.includes(toolName)) {
         isPaywalled = true;
@@ -223,7 +237,7 @@ export const initializePaymentMiddleware = async (
       return;
     }
 
-    const paymentHeaderValue = req.headers['x-payment'] as string | undefined;
+    const paymentHeaderValue = req.headers["x-payment"] as string | undefined;
 
     if (!paymentHeaderValue) {
       const paymentInfo: X402PaymentInfo = {
@@ -242,7 +256,7 @@ export const initializePaymentMiddleware = async (
     const paymentHeader = parsePaymentHeader(paymentHeaderValue);
     if (!paymentHeader) {
       res.status(400).json({
-        error: 'Invalid payment header format',
+        error: "Invalid payment header format",
       });
       return;
     }
@@ -253,12 +267,12 @@ export const initializePaymentMiddleware = async (
       amount,
       asset,
       networkId,
-      walletAddress,
+      walletAddress
     );
 
     if (!isVerified) {
       res.status(402).json({
-        error: 'Payment verification failed',
+        error: "Payment verification failed",
         paymentInfo: {
           maxAmountRequired: amount,
           resource: baseUrl,
@@ -271,11 +285,15 @@ export const initializePaymentMiddleware = async (
       return;
     }
 
-    const isSettled = await settlePayment(paymentHeader, facilitatorURL, walletAddress);
+    const isSettled = await settlePayment(
+      paymentHeader,
+      facilitatorURL,
+      walletAddress
+    );
 
     if (!isSettled) {
       res.status(500).json({
-        error: 'Payment settlement failed',
+        error: "Payment settlement failed",
       });
       return;
     }

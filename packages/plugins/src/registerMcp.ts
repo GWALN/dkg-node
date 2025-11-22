@@ -1,12 +1,13 @@
-import express from "express";
-import { v7 as uuidv7 } from "uuid";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import express from "express";
+import { v7 as uuidv7 } from "uuid";
 
 export const registerMcp = (
   api: express.Router,
   getServer: () => McpServer,
+  middleware?: express.RequestHandler[]
 ) => {
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
 
@@ -20,7 +21,11 @@ export const registerMcp = (
     }
   };
 
-  api.post("/mcp", async (req, res) => {
+  const postHandlers: express.RequestHandler[] = [];
+  if (middleware) {
+    postHandlers.push(...middleware);
+  }
+  postHandlers.push(async (req, res) => {
     const sessionId = req.headers["mcp-session-id"]?.toString() ?? "";
     let transport = transports[sessionId];
     if (!transport && isInitializeRequest(req.body)) {
@@ -51,6 +56,8 @@ export const registerMcp = (
       await transport.handleRequest(req, res, req.body);
     }
   });
+
   api.get("/mcp", handleSessionRequest);
+  api.post("/mcp", ...postHandlers);
   api.delete("/mcp", handleSessionRequest);
 };

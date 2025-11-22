@@ -1,13 +1,27 @@
-import express from "express";
-import cors from "cors";
-import morgan from "morgan";
-import compression from "compression";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import compression from "compression";
+import cors from "cors";
+import express from "express";
+import morgan from "morgan";
 import { registerMcp } from "./registerMcp";
 import { BlobStorage } from "./types";
 
 //@ts-ignore
 import type DKG from "dkg.js";
+
+const mcpMiddlewareRegistry: express.RequestHandler[] = [];
+
+export const registerMcpMiddleware = (middleware: express.RequestHandler) => {
+  mcpMiddlewareRegistry.push(middleware);
+};
+
+export const getMcpMiddleware = (): express.RequestHandler[] => [
+  ...mcpMiddlewareRegistry,
+];
+
+export const clearMcpMiddleware = () => {
+  mcpMiddlewareRegistry.length = 0;
+};
 
 export type DkgContext = {
   dkg: DKG;
@@ -16,12 +30,12 @@ export type DkgContext = {
 export type DkgPlugin = (
   ctx: DkgContext,
   mcp: McpServer,
-  api: express.Router,
+  api: express.Router
 ) => void;
 export type DkgPluginBuilderMethods = {
   withNamespace: (
     namespace: string,
-    options?: { middlewares: express.Handler[] },
+    options?: { middlewares: express.Handler[] }
   ) => DkgPluginBuilder;
 };
 export type DkgPluginBuilder = DkgPlugin & DkgPluginBuilderMethods;
@@ -30,13 +44,13 @@ export const defineDkgPlugin = (plugin: DkgPlugin): DkgPluginBuilder =>
   Object.assign(plugin, {
     withNamespace(
       namespace: string,
-      options?: { middlewares: express.Handler[] },
+      options?: { middlewares: express.Handler[] }
     ) {
       return defineDkgPlugin((ctx, mcp, api) => {
         const router = express.Router();
         options?.middlewares.forEach((m) => router.use(m));
         // Required patch in order for @dkg/plugin-swagger to work!
-        Object.assign(router, { prefix: "/" + namespace });
+        Object.assign(router, { prefix: `/${namespace}` });
 
         const mockRegistrationFns = (...fns: (keyof typeof mcp)[]) => {
           const impls: Record<string, Function> = {};
@@ -48,7 +62,7 @@ export const defineDkgPlugin = (plugin: DkgPlugin): DkgPluginBuilder =>
             (mcp as any)[fnKey] = (...args: any[]) => {
               if (typeof args[0] !== "string") {
                 console.warn(
-                  `Expected string as first argument for "mcp.${fnKey}" - skipping it.`,
+                  `Expected string as first argument for "mcp.${fnKey}" - skipping it.`
                 );
               } else {
                 args[0] = `${namespace}__${args[0]}`;
@@ -69,11 +83,11 @@ export const defineDkgPlugin = (plugin: DkgPlugin): DkgPluginBuilder =>
           "registerResource",
           "tool",
           "prompt",
-          "resource",
+          "resource"
         );
 
         plugin(ctx, mcp, router);
-        api.use("/" + namespace, router);
+        api.use(`/${namespace}`, router);
 
         revertMock();
       });
@@ -82,12 +96,12 @@ export const defineDkgPlugin = (plugin: DkgPlugin): DkgPluginBuilder =>
 
 export const defaultPlugin = defineDkgPlugin((ctx, mcp, api) => {
   api.use(express.json({ limit: "1gb" }));
-  api.use(express.urlencoded({ limit: "1gb" , extended: true}));
+  api.use(express.urlencoded({ limit: "1gb", extended: true }));
   api.use(
     cors({
       allowedHeaders: "*",
       exposedHeaders: "*",
-    }),
+    })
   );
   api.use(morgan("tiny"));
   api.use(compression());
@@ -110,16 +124,26 @@ export const createPluginServer = ({
 }) => {
   const server = express();
   server.disable("x-powered-by");
+
+  clearMcpMiddleware();
+
   plugins.forEach((plugin) =>
-    plugin(context, new McpServer({ name, version }), server),
+    plugin(context, new McpServer({ name, version }), server)
   );
-  registerMcp(server, () => {
-    const mcp = new McpServer(
-      { name, version },
-      { capabilities: { resources: {}, tools: { listChanged: true } } },
-    );
-    plugins.forEach((plugin) => plugin(context, mcp, express.Router()));
-    return mcp;
-  });
+
+  const mcpMiddleware = getMcpMiddleware();
+
+  registerMcp(
+    server,
+    () => {
+      const mcp = new McpServer(
+        { name, version },
+        { capabilities: { resources: {}, tools: { listChanged: true } } }
+      );
+      plugins.forEach((plugin) => plugin(context, mcp, express.Router()));
+      return mcp;
+    },
+    mcpMiddleware.length > 0 ? mcpMiddleware : undefined
+  );
   return server;
 };

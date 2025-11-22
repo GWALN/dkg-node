@@ -1,5 +1,6 @@
-import { defineDkgPlugin } from "@dkg/plugins";
+import { defineDkgPlugin, registerMcpMiddleware } from "@dkg/plugins";
 import type { ZodRawShape, ZodTypeAny } from "zod";
+import { createPaymentMiddleware } from "./lib/x402";
 import {
   analyzeHandler,
   AnalyzeInputSchema,
@@ -31,8 +32,14 @@ const extractShape = (schema: ZodTypeAny): ZodRawShape => {
   return {};
 };
 
-export default defineDkgPlugin((_, mcp) => {
+export default defineDkgPlugin(async (_, mcp) => {
   const logger = createToolLogger();
+
+  registerMcpMiddleware(
+    await createPaymentMiddleware({
+      description: "GWALN MCP tools",
+    })
+  );
 
   mcp.registerTool(
     "fetch",
